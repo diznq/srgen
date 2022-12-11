@@ -69,6 +69,9 @@ real LUT_SIN[256];
 real LUT_COS[256];
 real LUT_SINCOS[65536];
 
+real LUT_COSM[1024];
+real* LUT_COSM0 = LUT_COSM + 512;
+
 struct image {
     unsigned width;
     unsigned height;
@@ -165,7 +168,8 @@ inline real cos_similarity(final_prototype arr1, final_prototype arr2, unsigned 
     unsigned i = 0;
     real A1A2 = REAL_0;
     for (; i < size; i++) {
-        A1A2 += LUT_SINCOS[(arr1[i] << 8) | (arr2[i])];
+        int XY = arr1[i] - arr2[i];
+        A1A2 += LUT_COSM0[XY];
     }
     return A1A2;
 }
@@ -395,6 +399,11 @@ int main(int argc, const char** argv) {
             k = (i << 8) | j;
             LUT_SINCOS[k] = (sin(X) * sin(Y) + cos(X) * cos(Y)) / PROTOTYPE_SIZE; 
         }
+    }
+
+    for(i = -510; i < 510; i++) {
+        real Y = M_PI * (i / REAL_255);
+        LUT_COSM0[i] = cos(Y);
     }
 
     for (i = 1; i < argc; i++) {
