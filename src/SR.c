@@ -32,7 +32,7 @@
 #endif
 
 #ifndef TRANSFORM_SIZE
-#   define TRANSFORM_SIZE 3
+#   define TRANSFORM_SIZE 1
 #endif
 #ifndef TRANSFORM
 #   define TRANSFORM transform_rgb3
@@ -93,6 +93,7 @@ real* similarities[WORKERS];
 typedef void(*PFNTRANSFORM)(const unsigned color, mutable_prototype output);
 
 void transform_rgb3(const unsigned, mutable_prototype);
+void transform_yuv1(const unsigned, mutable_prototype);
 
 double get_time() {
 #ifdef _WIN32
@@ -369,6 +370,10 @@ inline void transform_rgb3(const unsigned l, mutable_prototype col) {
     col[0] = (l >> 16) & 255;
     col[1] = (l >> 8) & 255;
     col[2] = l & 255;
+}
+
+inline void transform_yuv1(const unsigned l, mutable_prototype col) {
+    col[0] = ((prototype_t)(0.299 * ((l >> 16) & 255) + 0.587 * ((l >> 8) & 255) + 0.114 * (l & 255))) & 255;
 }
 
 int main(int argc, const char** argv) {
