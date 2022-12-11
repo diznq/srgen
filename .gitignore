@@ -1,2 +1,11 @@
 bin/*
 *.bmp
+.vscode
+*.sh
+*.bat
+*.aac
+*.mp4
+*.exe
+*.jar
+*.class
+*.zip

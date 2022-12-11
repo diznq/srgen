@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream</title>
+    <script src="js/webgl.js"></script>
+    <script src="js/app.js"></script>
+    <link href="style/player.css" rel="stylesheet">
+</head>
+<body>
+    <div style="display: flex; width: calc(100vw - 32px)">
+        <div>
+            <div class="video" id="container">
+                <label for="video-selector" id="video-select-overlay">Click to select video</label>
+                <input type="file" id="video-selector" style="opacity: 0; position: absolute;">
+                <canvas width="1280" height="720"></canvas>
+                <div class="video-controls">
+                    <div class="video-controls-top"><!--
+                    --><div class="video-track-line"><div class="video-track-sizer"></div></div><!--
+                    --></div>
+                    <div class="video-controls-bottom">
+                        <div class="video-time">00:00</div>/
+                        <div class="video-total-time">--:--</div>
+                        <div class="video-fullscreen"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <div style="position: relative" class="palette">
+                <img src="./assets/palette0.png" id="palette" style="max-width: 100%">
+                <label for="image-selector" id="image-select-overlay">Click to select palette</label>
+                <input type="file" id="image-selector" style="opacity: 0; position: absolute;">
+            </div>
+        </div>
+    </div>
+    <script>
+        window.onload = () => StreamVideo(document.getElementById("container"));
+    </script>
+</body>
+</html>
