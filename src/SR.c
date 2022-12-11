@@ -165,7 +165,7 @@ inline real cos_similarity(final_prototype arr1, final_prototype arr2, unsigned 
     unsigned i = 0;
     real A1A2 = REAL_0;
     for (; i < size; i++) {
-        A1A2 += LUT_SINCOS[(arr1[i] << 8) | (arr2[i])]; //arr1[i] * arr2[i];
+        A1A2 += LUT_SINCOS[(arr1[i] << 8) | (arr2[i])];
     }
     return A1A2;
 }
