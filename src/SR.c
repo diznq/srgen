@@ -1,3 +1,4 @@
+// SinCos optimized version of the algorithm
 #define _USE_MATH_DEFINES
 #define _CRT_SECURE_NO_WARNINGS
 #define _GNU_SOURCE
@@ -31,12 +32,11 @@
 #endif
 
 #ifndef TRANSFORM_SIZE
-#   define TRANSFORM_SIZE 6
+#   define TRANSFORM_SIZE 3
 #endif
 #ifndef TRANSFORM
-#   define TRANSFORM transform_rgb6
+#   define TRANSFORM transform_rgb3
 #endif
-#define TRANSFORM_SINCOS
 
 #ifndef BLOCK_SIZE_LOG
 #   define BLOCK_SIZE_LOG 4
@@ -44,22 +44,17 @@
 #define BLOCK_SIZE (1 << BLOCK_SIZE_LOG)
 #define BLOCK_SIZE_SQ (1 << BLOCK_SIZE_LOG << BLOCK_SIZE_LOG)
 
-#ifdef TRANSFORM_SINCOS
 #define PROTOTYPE_SIZE (BLOCK_SIZE_SQ * TRANSFORM_SIZE)
-#define PROTOTYPE_MUL (2.0 / PROTOTYPE_SIZE)
-#else
-#define PROTOTYPE_SIZE (1 + BLOCK_SIZE_SQ * TRANSFORM_SIZE)
-#endif
 
 #define AGGRESSIVE_VECTORISATION
-#define SINCOS_MATH
 
 struct image;
 struct worker_call;
 
-typedef double real;
-#define REAL_255 255.0
-#define REAL_0 0.0
+typedef float real;
+typedef uint8_t prototype_t;
+#define REAL_255 255.0f
+#define REAL_0 0.0f
 
 typedef real* const mutable_real;
 typedef const real* const final_real;
@@ -67,6 +62,12 @@ typedef unsigned* const  mutable_uint;
 typedef const unsigned* const final_uint;
 typedef struct image* const mutable_image;
 typedef const struct image* const final_image;
+typedef const prototype_t* const final_prototype;
+typedef prototype_t* const mutable_prototype;
+
+real LUT_SIN[256];
+real LUT_COS[256];
+real LUT_SINCOS[65536];
 
 struct image {
     unsigned width;
@@ -85,22 +86,21 @@ struct worker_call {
 
 struct worker_call* work[WORKERS];
 unsigned work_size[WORKERS];
-real* prototypes = 0;
+prototype_t* prototypes = 0;
 unsigned total_blocks = 0;
 unsigned* buckets = 0;
 real* similarities[WORKERS];
 
-typedef void(*PFNTRANSFORM)(const unsigned color, mutable_real output);
+typedef void(*PFNTRANSFORM)(const unsigned color, mutable_prototype output);
 
-void transform_rgb6(const unsigned, mutable_real);
-void transform_yuv2(const unsigned, mutable_real);
+void transform_rgb3(const unsigned, mutable_prototype);
 
-real get_time() {
+double get_time() {
 #ifdef _WIN32
     FILETIME ft;
     GetSystemTimePreciseAsFileTime(&ft);
     uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    return (real)t / (real)10000000;
+    return ((double)t / (double)10000000);
 #else
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -161,35 +161,21 @@ void release_image(final_image image) {
     free(image->data);
 }
 
-inline real cos_similarity(final_real arr1, final_real arr2, unsigned size) {
-#ifndef TRANSFORM_SINCOS
-    real A1A1 = arr1[0], A2A2 = arr2[0];
-    unsigned i = 1;
-#else
+inline real cos_similarity(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
-#endif
     real A1A2 = REAL_0;
     for (; i < size; i++) {
-        A1A2 += arr1[i] * arr2[i];
+        A1A2 += LUT_SINCOS[(arr1[i] << 8) | (arr2[i])]; //arr1[i] * arr2[i];
     }
-#ifdef TRANSFORM_SINCOS
-    return A1A2 * PROTOTYPE_MUL;
-#else
-    return A1A2 / (sqrt(A1A1 * A2A2));
-#endif
+    return A1A2;
 }
 
-int transform_block(final_image img, const unsigned x, const unsigned y, mutable_real out_prototype, mutable_uint bucket, const unsigned dir) {
+int transform_block(final_image img, const unsigned x, const unsigned y, mutable_prototype out_prototype, mutable_uint bucket, const unsigned dir) {
     unsigned C = 0, tx = 0, ty = 0, rgb = 0;
-#ifdef TRANSFORM_SINCOS
     unsigned c = 0;
-#else
-    unsigned c = 1;
-    real value = 0.0, mag = 0.0;
-#endif
     final_uint img_data = img->data;
     unsigned fw = img->width;
-    real transformed[TRANSFORM_SIZE];
+    prototype_t transformed[TRANSFORM_SIZE];
     for (unsigned _y = 0; _y < BLOCK_SIZE; _y++) {
         for (unsigned _x = 0; _x < BLOCK_SIZE; _x++) {
             switch (dir) {
@@ -223,23 +209,14 @@ int transform_block(final_image img, const unsigned x, const unsigned y, mutable
                 bucket[C++] = rgb;
             TRANSFORM(rgb, transformed);
             for (unsigned K = 0; K < TRANSFORM_SIZE; K++) {
-#ifdef TRANSFORM_SINCOS
                 out_prototype[c++] = transformed[K];
-#else
-                value = transformed[K];
-                mag += value * value;
-                out_prototype[c++] = value;
-#endif
             }
         }
     }
-#ifndef TRANSFORM_SINCOS
-    out_prototype[0] = mag;
-#endif
     return c;
 }
 
-int find_nearest_similar(final_image image, mutable_real prototype, const unsigned int worker, const unsigned x, const unsigned y, const unsigned blockCount) {
+int find_nearest_similar(final_image image, mutable_prototype prototype, const unsigned int worker, const unsigned x, const unsigned y, const unsigned blockCount) {
     unsigned closest = 0;
     unsigned first = 1;
     unsigned i = 0;
@@ -280,7 +257,7 @@ int find_nearest_similar(final_image image, mutable_real prototype, const unsign
 int start_worker(void* pid) {
     uintptr_t id = (uintptr_t)pid;
     unsigned i = 0, j = work_size[id];
-    real prototype[PROTOTYPE_SIZE];
+    prototype_t prototype[PROTOTYPE_SIZE];
     for (i = 0; i < j; i++) {
         struct worker_call item = work[id][i];
         item.writeback[0] = find_nearest_similar(item.in_image, prototype, item.worker, item.x, item.y, item.blk);
@@ -304,7 +281,7 @@ void process_image(final_image in_image, final_image in_palette, const char* out
     output.data = malloc(sizeof(int) * ih * iw);
 
     if (!prototypes) {
-        prototypes = malloc(sizeof(real) * TRANSFORMS * blockCount * PROTOTYPE_SIZE);
+        prototypes = malloc(sizeof(mutable_prototype) * TRANSFORMS * blockCount * PROTOTYPE_SIZE);
         buckets = malloc(sizeof(int) * TRANSFORMS * blockCount * BLOCK_SIZE_SQ);
         for (y = 0; y < ph; y += BLOCK_SIZE) {
             for (x = 0; x < pw; x += BLOCK_SIZE) {
@@ -388,28 +365,13 @@ void process_image(final_image in_image, final_image in_palette, const char* out
     free(results);
 }
 
-void transform_yuv2(const unsigned l, mutable_real col) {
-    col[0] = M_PI * (0.299 * ((l >> 16) & 255) + 0.587 * ((l >> 8) & 255) + 0.114 * (l & 255)) / 255.0;
-    col[1] = cos(col[0]);
-    col[0] = sin(col[0]);
-}
-
-void transform_rgb6(const unsigned l, mutable_real col) {
-    col[0] = M_PI * ((l >> 16) & 255) / REAL_255;
-    col[1] = M_PI * ((l >> 8) & 255) / REAL_255;
-    col[2] = M_PI * (l & 255) / REAL_255;
-#if defined(__GNUC__) && defined(SINCOS_MATH)
-    sincos(col[0], col, col + 3);
-    sincos(col[1], col + 1, col + 4);
-    sincos(col[2], col + 2, col + 5);
-#else
-    col[3] = cos(col[0]);
-    col[4] = cos(col[1]);
-    col[5] = cos(col[2]);
-    col[0] = sin(col[0]);
-    col[1] = sin(col[1]);
-    col[2] = sin(col[2]);
-#endif
+void transform_rgb3(const unsigned l, mutable_prototype col) {
+    unsigned r = (l >> 16) & 255;
+    unsigned g = (l >> 8) & 255;
+    unsigned b = l & 255;
+    col[0] = r;
+    col[1] = g;
+    col[2] = b;
 }
 
 int main(int argc, const char** argv) {
@@ -422,7 +384,18 @@ int main(int argc, const char** argv) {
     const char* in_image = "1.bmp";
     const char* in_pattern = "2.bmp";
     const char* out_image = "3.bmp";
-    int i = 0, run = 1;
+    int i = 0, j = 0, k = 0, run = 1;
+
+    for(i = 0; i < 256; i++) {
+        real Y = M_PI * (i / REAL_255);
+        LUT_SIN[i] = sin(Y);
+        LUT_COS[i] = cos(Y);
+        for(j = 0; j < 256 ; j++) {
+            real X = M_PI * (j / REAL_255);
+            k = (i << 8) | j;
+            LUT_SINCOS[k] = (sin(X) * sin(Y) + cos(X) * cos(Y)) / PROTOTYPE_SIZE; 
+        }
+    }
 
     for (i = 1; i < argc; i++) {
         const char* prev = argv[i - 1];
@@ -451,7 +424,7 @@ int main(int argc, const char** argv) {
         }
         if (access(in_image_f, F_OK) != 0) break;
 
-        real start = get_time();
+        double start = get_time();
         load_image(&img, in_image_f);
         if (convert) {
             save_image(&img, out_image_f);
