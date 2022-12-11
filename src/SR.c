@@ -65,10 +65,6 @@ typedef const struct image* const final_image;
 typedef const prototype_t* const final_prototype;
 typedef prototype_t* const mutable_prototype;
 
-real LUT_SIN[256];
-real LUT_COS[256];
-real LUT_SINCOS[65536];
-
 real LUT_COSM[1024];
 real* LUT_COSM0 = LUT_COSM + 512;
 
@@ -389,13 +385,6 @@ int main(int argc, const char** argv) {
 
     for(i = 0; i < 256; i++) {
         real Y = M_PI * (i / REAL_255);
-        LUT_SIN[i] = sin(Y);
-        LUT_COS[i] = cos(Y);
-        for(j = 0; j < 256 ; j++) {
-            real X = M_PI * (j / REAL_255);
-            k = (i << 8) | j;
-            LUT_SINCOS[k] = (sin(X) * sin(Y) + cos(X) * cos(Y)) / PROTOTYPE_SIZE; 
-        }
     }
 
     for(i = -510; i < 510; i++) {
