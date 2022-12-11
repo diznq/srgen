@@ -369,13 +369,10 @@ void process_image(final_image in_image, final_image in_palette, const char* out
     free(results);
 }
 
-void transform_rgb3(const unsigned l, mutable_prototype col) {
-    unsigned r = (l >> 16) & 255;
-    unsigned g = (l >> 8) & 255;
-    unsigned b = l & 255;
-    col[0] = r;
-    col[1] = g;
-    col[2] = b;
+inline void transform_rgb3(const unsigned l, mutable_prototype col) {
+    col[0] = (l >> 16) & 255;
+    col[1] = (l >> 8) & 255;
+    col[2] = l & 255;
 }
 
 int main(int argc, const char** argv) {
