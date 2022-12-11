@@ -27,7 +27,7 @@
 #endif
 
 #ifndef TRANSFORMS
-#   define TRANSFORMS 1
+#   define TRANSFORMS 6
 #endif
 
 #ifndef TRANSFORM_SIZE
