@@ -13,6 +13,9 @@ class SR {
 	interface ColorScheme {
 		double[] translate(int color);
 		int channels();
+		default boolean isSinCos() {
+			return true;
+		}
 	}
 
 	public static class RGB1 implements ColorScheme {
@@ -29,6 +32,11 @@ class SR {
 		@Override
 		public int channels() {
 			return 1;
+		}
+
+		@Override
+		public boolean isSinCos() {
+			return false;
 		}
 	}
 
@@ -49,10 +57,16 @@ class SR {
 		public int channels() {
 			return 1;
 		}
+
+		@Override
+		public boolean isSinCos() {
+			return false;
+		}
 	}
 
 	public static class YUV2 implements ColorScheme {
 		public YUV2() {}
+
 		@Override
 		public double[] translate(int l) {
 			double arr[] = new double[2];
@@ -86,6 +100,11 @@ class SR {
 		@Override
 		public int channels() {
 			return 3;
+		}
+		
+		@Override
+		public boolean isSinCos() {
+			return false;
 		}
 	}
 	
@@ -128,6 +147,7 @@ class SR {
 	boolean blend = false;
 	boolean yuv = true;
 	boolean mae = false;
+	boolean sincos = false;
 	int noise = 0;
 	int blk = 0;
 	int blockSize = 5;
@@ -271,6 +291,7 @@ class SR {
 	}
 
 	void processImage(final BufferedImage image, final BufferedImage palette, final String outPath) throws IOException {
+		sincos = activeScheme.isSinCos();
 		final int realBlockSize = 1 << blockSize;
 		final int pw = (palette.getWidth() >> blockSize) << blockSize;
 		final int ph = (palette.getHeight() >> blockSize) << blockSize;
@@ -358,13 +379,21 @@ class SR {
 	}
 
 	double cosSimilarity(final double[] arr1, final double[] arr2) {
-		double A1A1 = 0.0, A2A2 = 0.0, A1A2 = 0.0;
-		for(int i = 0; i < arr1.length; i++) {
-			A1A1 += arr1[i] * arr1[i];
-			A2A2 += arr2[i] * arr2[i];
-			A1A2 += arr1[i] * arr2[i];
+		if(sincos) {
+			double A1A1 = arr1.length / 2, A2A2 = arr2.length / 2, A1A2 = 0.0;
+			for(int i = 0; i < arr1.length; i++) {
+				A1A2 += arr1[i] * arr2[i];
+			}
+			return A1A2 / Math.sqrt(A1A1 * A2A2);
+		} else {
+			double A1A1 = 0.0, A2A2 = 0.0, A1A2 = 0.0;
+			for(int i = 0; i < arr1.length; i++) {
+				A1A1 += arr1[i] * arr1[i];
+				A2A2 += arr2[i] * arr2[i];
+				A1A2 += arr1[i] * arr2[i];
+			}
+			return A1A2 / Math.sqrt(A1A1 * A2A2);
 		}
-		return A1A2 / Math.sqrt(A1A1 * A2A2);
 	}
 
 	static <T> boolean contains(final T[] array, final T v) {
