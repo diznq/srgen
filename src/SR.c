@@ -28,7 +28,7 @@
 #endif
 
 #ifndef TRANSFORMS
-#   define TRANSFORMS 2
+#   define TRANSFORMS 6
 #endif
 
 #ifndef TRANSFORM_SIZE
@@ -55,6 +55,7 @@ typedef float real;
 typedef uint8_t prototype_t;
 #define REAL_255 255.0f
 #define REAL_0 0.0f
+//#define QUALITY 0.85f
 
 typedef real* const mutable_real;
 typedef const real* const final_real;
@@ -112,12 +113,12 @@ void load_image(mutable_image output, const char* path) {
     if (!output) return;
     if (strstr(path, ".bin")) {
         FILE* f = fopen(path, "rb");
-        if(!fread(output, sizeof(unsigned) * 2, 1, f)) {
+        if (!fread(output, sizeof(unsigned) * 2, 1, f)) {
             fclose(f);
             return;
         }
         output->data = malloc(sizeof(unsigned) * output->width * output->height);
-        if(!fread(output->data, sizeof(unsigned) * output->width * output->height, 1, f)) {
+        if (!fread(output->data, sizeof(unsigned) * output->width * output->height, 1, f)) {
             fclose(f);
             return;
         }
@@ -231,6 +232,9 @@ int find_nearest_similar(final_image image, mutable_prototype prototype, const u
     for (i = 0; i < blockCount; i++) {
 #ifdef AGGRESSIVE_VECTORISATION
         writeback[i] = cos_similarity(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
+#ifdef QUALITY
+        if (writeback[i] >= QUALITY) return i;
+#endif
 #else
         similarity = cos_similarity(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
         if (first || similarity > max_similarity) {
@@ -250,7 +254,7 @@ int find_nearest_similar(final_image image, mutable_prototype prototype, const u
             first = 0;
         }
     }
-#endif
+#endif  
 
     return closest;
 }
@@ -388,13 +392,8 @@ int main(int argc, const char** argv) {
     const char* out_image = "3.bmp";
     int i = 0, j = 0, k = 0, run = 1;
 
-    for(i = 0; i < 256; i++) {
-        real Y = M_PI * (i / REAL_255);
-    }
-
-    for(i = -510; i < 510; i++) {
-        real Y = M_PI * (i / REAL_255);
-        LUT_COSM0[i] = cos(Y);
+    for (i = -510; i < 510; i++) {
+        LUT_COSM0[i] = (real)(cos(M_PI * (i / 255.0)) / PROTOTYPE_SIZE);
     }
 
     for (i = 1; i < argc; i++) {
@@ -428,7 +427,8 @@ int main(int argc, const char** argv) {
         load_image(&img, in_image_f);
         if (convert) {
             save_image(&img, out_image_f);
-        } else {
+        }
+        else {
             process_image(&img, &pattern, out_image_f);
         }
         release_image(&img);
