@@ -28,18 +28,18 @@
 #endif
 
 #ifndef TRANSFORMS
-#   define TRANSFORMS 6
+#   define TRANSFORMS 2
 #endif
 
 #ifndef TRANSFORM_SIZE
-#   define TRANSFORM_SIZE 1
+#   define TRANSFORM_SIZE 3
 #endif
 #ifndef TRANSFORM
 #   define TRANSFORM transform_rgb3
 #endif
 
 #ifndef BLOCK_SIZE_LOG
-#   define BLOCK_SIZE_LOG 4
+#   define BLOCK_SIZE_LOG 3
 #endif
 #define BLOCK_SIZE (1 << BLOCK_SIZE_LOG)
 #define BLOCK_SIZE_SQ (1 << BLOCK_SIZE_LOG << BLOCK_SIZE_LOG)
