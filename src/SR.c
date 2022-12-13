@@ -46,19 +46,14 @@
 
 #define PROTOTYPE_SIZE (BLOCK_SIZE_SQ * TRANSFORM_SIZE)
 
-#define AGGRESSIVE_VECTORISATION
+#define COS_T_MAX_VALUE (0x7FFFFFFF)
 
 struct image;
 struct worker_call;
 
-typedef float real;
-typedef uint8_t prototype_t;
-#define REAL_255 255.0f
-#define REAL_0 0.0f
-//#define QUALITY 0.85f
+typedef int32_t prototype_t;
+typedef int32_t cos_t;
 
-typedef real* const mutable_real;
-typedef const real* const final_real;
 typedef unsigned* const  mutable_uint;
 typedef const unsigned* const final_uint;
 typedef struct image* const mutable_image;
@@ -66,8 +61,8 @@ typedef const struct image* const final_image;
 typedef const prototype_t* const final_prototype;
 typedef prototype_t* const mutable_prototype;
 
-real LUT_COSM[1024];
-real* LUT_COSM0 = LUT_COSM + 512;
+cos_t LUT_COSM[1024];
+cos_t* LUT_COSM0 = LUT_COSM + 512;
 
 struct image {
     unsigned width;
@@ -89,7 +84,6 @@ unsigned work_size[WORKERS];
 prototype_t* prototypes = 0;
 unsigned total_blocks = 0;
 unsigned* buckets = 0;
-real* similarities[WORKERS];
 
 typedef void(*PFNTRANSFORM)(const unsigned color, mutable_prototype output);
 
@@ -105,7 +99,7 @@ double get_time() {
 #else
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    return start.tv_sec + start.tv_nsec / (real)1000000000;
+    return (start.tv_sec + (double)start.tv_nsec / 1000000000.0);
 #endif
 }
 
@@ -162,9 +156,9 @@ void release_image(final_image image) {
     free(image->data);
 }
 
-inline real cos_similarity(final_prototype arr1, final_prototype arr2, unsigned size) {
+inline cos_t cos_similarity(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
-    real A1A2 = REAL_0;
+    cos_t A1A2 = (cos_t)0;
     for (; i < size; i++) {
         int XY = arr1[i] - arr2[i];
         A1A2 += LUT_COSM0[XY];
@@ -222,39 +216,18 @@ int find_nearest_similar(final_image image, mutable_prototype prototype, const u
     unsigned closest = 0;
     unsigned first = 1;
     unsigned i = 0;
-    real max_similarity = REAL_0;
-    real similarity = REAL_0;
-#ifdef AGGRESSIVE_VECTORISATION
-    real* writeback = similarities[worker];
-#endif
+    cos_t max_similarity = (cos_t)0;
+    cos_t similarity = (cos_t)0;
     transform_block(image, x, y, prototype, NULL, 0);
 
     for (i = 0; i < blockCount; i++) {
-#ifdef AGGRESSIVE_VECTORISATION
-        writeback[i] = cos_similarity(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
-#ifdef QUALITY
-        if (writeback[i] >= QUALITY) return i;
-#endif
-#else
         similarity = cos_similarity(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
         if (first || similarity > max_similarity) {
             closest = i;
             max_similarity = similarity;
             first = 0;
         }
-#endif
     }
-
-#ifdef AGGRESSIVE_VECTORISATION
-    for (i = 0; i < blockCount; i++) {
-        real similarity = writeback[i];
-        if (first || similarity > max_similarity) {
-            closest = i;
-            max_similarity = similarity;
-            first = 0;
-        }
-    }
-#endif  
 
     return closest;
 }
@@ -307,9 +280,6 @@ void process_image(final_image in_image, final_image in_palette, const char* out
     for (i = 0; i < WORKERS; i++) {
         work_size[i] = 0;
         work[i] = malloc(sizeof(struct worker_call) * (iw * ih) / BLOCK_SIZE_SQ);
-#ifdef AGGRESSIVE_VECTORISATION
-        similarities[i] = malloc(sizeof(double) * total_blocks);
-#endif
     }
 
     for (y = 0; y < ih; y += BLOCK_SIZE) {
@@ -348,9 +318,6 @@ void process_image(final_image in_image, final_image in_palette, const char* out
 
     for (i = 0; i < WORKERS; i++) {
         free(work[i]);
-#ifdef AGGRESSIVE_VECTORISATION
-        free(similarities[i]);
-#endif
     }
 
     m = 0;
@@ -386,6 +353,7 @@ int main(int argc, const char** argv) {
     char in_image_f[255];
     char out_image_f[255];
     int convert = 0;
+    double cosine = 0.0;
 
     const char* in_image = "1.bmp";
     const char* in_pattern = "2.bmp";
@@ -393,7 +361,9 @@ int main(int argc, const char** argv) {
     int i = 0, j = 0, k = 0, run = 1;
 
     for (i = -510; i < 510; i++) {
-        LUT_COSM0[i] = (real)(cos(M_PI * (i / 255.0)) / PROTOTYPE_SIZE);
+        double cosine = cos(M_PI * (i / 255.0));
+        cosine = cosine / PROTOTYPE_SIZE;
+        LUT_COSM0[i] = (cos_t)(cosine * COS_T_MAX_VALUE);
     }
 
     for (i = 1; i < argc; i++) {
