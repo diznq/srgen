@@ -1,6 +1,5 @@
 bin/*
 .vscode
-*.sh
 *.bat
 *.aac
 *.exe

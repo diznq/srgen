@@ -21,7 +21,7 @@
 #endif
 
 #include "bmp.h"
-
+#include "utils.h"
 
 #ifndef WORKERS
 #   define WORKERS 8
@@ -98,6 +98,7 @@ typedef void(*PFNTRANSFORM)(const unsigned color, mutable_prototype output);
 void transform_rgb3(const unsigned, mutable_prototype);
 void transform_xyz3(const unsigned, mutable_prototype);
 void transform_yuv1(const unsigned, mutable_prototype);
+void transform_yuv3(const unsigned, mutable_prototype);
 
 double get_time() {
 #ifdef _WIN32
@@ -392,8 +393,17 @@ void transform_xyz3(const unsigned l, mutable_prototype col) {
     mul3313(l, m33, col);
 }
 
-inline void transform_yuv1(const unsigned l, mutable_prototype col) {
+void transform_yuv1(const unsigned l, mutable_prototype col) {
     col[0] = ((prototype_t)(0.299 * ((l >> 16) & 255) + 0.587 * ((l >> 8) & 255) + 0.114 * (l & 255))) & 255;
+}
+
+void transform_yuv3(const unsigned l, mutable_prototype col) {
+    int32_t R = (l >> 16) & 255;
+    int32_t G = (l >> 8) & 255;
+    int32_t B = l & 255;
+    col[0] = RGB2Y(R, G, B);
+    col[1] = RGB2U(R, G, B);
+    col[2] = RGB2V(R, G, B);
 }
 
 int main(int argc, const char** argv) {
