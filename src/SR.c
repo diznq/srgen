@@ -46,11 +46,12 @@
 
 #define PROTOTYPE_SIZE (BLOCK_SIZE_SQ * TRANSFORM_SIZE)
 
-#define COS_T_MAX_VALUE (0x7FFFFFFF)
+#define SIMILARITY_T_MAX_VALUE (0x7FFFFFFF)
 
 #define COS 0
 #define XOR 1
 #define ABS 2
+#define NORMAL 3
 
 #ifndef SIMILARITY
 #define SIMILARITY COS
@@ -60,7 +61,7 @@ struct image;
 struct worker_call;
 
 typedef int32_t prototype_t;
-typedef int32_t cos_t;
+typedef int32_t similarity_t;
 
 typedef unsigned* const  mutable_uint;
 typedef const unsigned* const final_uint;
@@ -69,8 +70,8 @@ typedef const struct image* const final_image;
 typedef const prototype_t* const final_prototype;
 typedef prototype_t* const mutable_prototype;
 
-cos_t LUT_COSM[512];
-cos_t* LUT_COSM0 = LUT_COSM + 256;
+similarity_t LUT_FN[512];
+similarity_t* LUT_FN0 = LUT_FN + 256;
 
 struct image {
     unsigned width;
@@ -166,12 +167,12 @@ void release_image(final_image image) {
     free(image->data);
 }
 
-inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsigned size) {
+inline similarity_t similarity_score(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
     #if SIMILARITY == ABS
-    cos_t A1A2 = (cos_t)(255 * size);
+    similarity_t A1A2 = (similarity_t)(255 * size);
     #else
-    cos_t A1A2 = (cos_t)0;
+    similarity_t A1A2 = (similarity_t)0;
     #endif
     for (; i < size; i++) {
         #if SIMILARITY == XOR
@@ -180,7 +181,7 @@ inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsign
         A1A2 -= abs(arr1[i] - arr2[i]);
         #else
         int XY = arr1[i] - arr2[i];
-        A1A2 += LUT_COSM0[XY];
+        A1A2 += LUT_FN0[XY];
         #endif
     }
     return A1A2;
@@ -236,8 +237,8 @@ int find_nearest_similar(final_image image, mutable_prototype prototype, const u
     unsigned closest = 0;
     unsigned first = 1;
     unsigned i = 0;
-    cos_t max_similarity = (cos_t)0;
-    cos_t similarity = (cos_t)0;
+    similarity_t max_similarity = (similarity_t)0;
+    similarity_t similarity = (similarity_t)0;
     transform_block(image, x, y, prototype, NULL, 0);
 
     for (i = 0; i < blockCount; i++) {
@@ -406,13 +407,17 @@ void transform_yuv3(const unsigned l, mutable_prototype col) {
     col[2] = RGB2V(R, G, B);
 }
 
+double nor(double x, double mi, double delta) {
+    return sqrt(delta) * exp(-0.5 * pow((x - mi) / delta, 2.0)) / (delta * sqrt(2.0 * M_PI));
+}
+
 int main(int argc, const char** argv) {
     struct image img;
     struct image pattern;
     char in_image_f[255];
     char out_image_f[255];
     int convert = 0;
-    double cosine = 0.0;
+    double fnValue = 0.0;
 
     const char* in_image = "1.bmp";
     const char* in_pattern = "2.bmp";
@@ -420,9 +425,13 @@ int main(int argc, const char** argv) {
     int i = 0, j = 0, k = 0, run = 1;
 
     for (i = -255; i <= 255; i++) {
-        double cosine = cos(M_PI * (i / 255.0));
-        cosine = cosine / PROTOTYPE_SIZE;
-        LUT_COSM0[i] = (cos_t)(cosine * COS_T_MAX_VALUE);
+        #if SIMILARITY == NORMAL
+        fnValue = nor(i / 255.0, 0.0, 0.4);
+        #else
+        fnValue = cos(M_PI * (i / 255.0));
+        #endif
+        fnValue = fnValue / PROTOTYPE_SIZE;
+        LUT_FN0[i] = (similarity_t)(fnValue * SIMILARITY_T_MAX_VALUE);
     }
 
     for (i = 1; i < argc; i++) {
@@ -444,8 +453,7 @@ int main(int argc, const char** argv) {
         if (strstr(in_image, "%") != NULL) {
             snprintf(in_image_f, sizeof(in_image_f) - 1, in_image, i);
             snprintf(out_image_f, sizeof(out_image_f) - 1, out_image, i);
-        }
-        else {
+        } else {
             strncpy(in_image_f, in_image, sizeof(in_image_f) - 1);
             strncpy(out_image_f, out_image, sizeof(out_image_f) - 1);
             run = 0;
