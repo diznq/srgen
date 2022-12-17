@@ -51,7 +51,10 @@
 #define COS 0
 #define XOR 1
 #define ABS 2
+
+#ifndef SIMILARITY
 #define SIMILARITY COS
+#endif
 
 struct image;
 struct worker_call;
@@ -66,8 +69,8 @@ typedef const struct image* const final_image;
 typedef const prototype_t* const final_prototype;
 typedef prototype_t* const mutable_prototype;
 
-cos_t LUT_COSM[1024];
-cos_t* LUT_COSM0 = LUT_COSM + 512;
+cos_t LUT_COSM[512];
+cos_t* LUT_COSM0 = LUT_COSM + 256;
 
 struct image {
     unsigned width;
@@ -93,6 +96,7 @@ unsigned* buckets = 0;
 typedef void(*PFNTRANSFORM)(const unsigned color, mutable_prototype output);
 
 void transform_rgb3(const unsigned, mutable_prototype);
+void transform_xyz3(const unsigned, mutable_prototype);
 void transform_yuv1(const unsigned, mutable_prototype);
 
 double get_time() {
@@ -163,15 +167,15 @@ void release_image(final_image image) {
 
 inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
-    #if SIMILARITY == ABS_SIMILARITY
-    cos_t A1A2 = (cos_t)(510 * size);
+    #if SIMILARITY == ABS
+    cos_t A1A2 = (cos_t)(255 * size);
     #else
     cos_t A1A2 = (cos_t)0;
     #endif
     for (; i < size; i++) {
-        #if SIMILARITY == XOR_SIMILARITY
+        #if SIMILARITY == XOR
         A1A2 += arr1[i] ^ arr2[i];
-        #elif SIMILARITY == ABS_SIMILARITY
+        #elif SIMILARITY == ABS
         A1A2 -= abs(arr1[i] - arr2[i]);
         #else
         int XY = arr1[i] - arr2[i];
@@ -290,7 +294,7 @@ void process_image(final_image in_image, final_image in_palette, const char* out
                 }
             }
         }
-        #if SIMILARITY == XOR_SIMILARITY
+        #if SIMILARITY == XOR
         // pre-negate the prototype field, so we can save one XOR later in similarity_score
         for(i = 0; i < TRANSFORMS * blockCount * PROTOTYPE_SIZE; i++)
             prototypes[i] = prototypes[i] ^ 255;
@@ -357,10 +361,35 @@ void process_image(final_image in_image, final_image in_palette, const char* out
     free(results);
 }
 
-inline void transform_rgb3(const unsigned l, mutable_prototype col) {
+prototype_t clamp(prototype_t a, prototype_t a_min, prototype_t a_max) {
+    return min(a_max, max(a_min, a));
+}
+
+void mul3313(const unsigned l, const double *const m33, const mutable_prototype out) {
+    double D = (m33[0] + m33[1] + m33[2]), N = 0.0;
+    int i = 0;
+    for(i = 3; i < 9; i += 3) {
+        N = (m33[i] + m33[i + 1] + m33[i + 2]);
+        if(N > D) D = N;
+    }
+    out[0] = ((prototype_t)((m33[0] * ((l >> 16) & 255) + m33[1] * ((l >> 8) & 255) + m33[2] * (l & 255))/D));
+    out[1] = ((prototype_t)((m33[3] * ((l >> 16) & 255) + m33[4] * ((l >> 8) & 255) + m33[5] * (l & 255))/D));
+    out[2] = ((prototype_t)((m33[6] * ((l >> 16) & 255) + m33[7] * ((l >> 8) & 255) + m33[8] * (l & 255))/D));
+}
+
+void transform_rgb3(const unsigned l, mutable_prototype col) {
     col[0] = (l >> 16) & 255;
     col[1] = (l >> 8) & 255;
     col[2] = l & 255;
+}
+
+void transform_xyz3(const unsigned l, mutable_prototype col) {
+    const double m33[] = { 
+        0.5767309,  0.1855540,  0.1881852,
+        0.2973769,  0.6273491,  0.0752741,
+        0.0270343,  0.0706872,  0.9911085
+    };
+    mul3313(l, m33, col);
 }
 
 inline void transform_yuv1(const unsigned l, mutable_prototype col) {
@@ -380,7 +409,7 @@ int main(int argc, const char** argv) {
     const char* out_image = "3.bmp";
     int i = 0, j = 0, k = 0, run = 1;
 
-    for (i = -510; i < 510; i++) {
+    for (i = -255; i <= 255; i++) {
         double cosine = cos(M_PI * (i / 255.0));
         cosine = cosine / PROTOTYPE_SIZE;
         LUT_COSM0[i] = (cos_t)(cosine * COS_T_MAX_VALUE);
