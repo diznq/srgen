@@ -1,4 +1,4 @@
-// SinCos optimized version of the algorithm
+// SinCos/XOR optimized version of the algorithm
 #define _USE_MATH_DEFINES
 #define _CRT_SECURE_NO_WARNINGS
 #define _GNU_SOURCE
@@ -47,6 +47,7 @@
 #define PROTOTYPE_SIZE (BLOCK_SIZE_SQ * TRANSFORM_SIZE)
 
 #define COS_T_MAX_VALUE (0x7FFFFFFF)
+#define NXOR
 
 struct image;
 struct worker_call;
@@ -156,12 +157,16 @@ void release_image(final_image image) {
     free(image->data);
 }
 
-inline cos_t cos_similarity(final_prototype arr1, final_prototype arr2, unsigned size) {
+inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
     cos_t A1A2 = (cos_t)0;
     for (; i < size; i++) {
+        #ifdef NXOR
+        A1A2 += arr1[i] ^ arr2[i];
+        #else
         int XY = arr1[i] - arr2[i];
         A1A2 += LUT_COSM0[XY];
+        #endif
     }
     return A1A2;
 }
@@ -221,7 +226,7 @@ int find_nearest_similar(final_image image, mutable_prototype prototype, const u
     transform_block(image, x, y, prototype, NULL, 0);
 
     for (i = 0; i < blockCount; i++) {
-        similarity = cos_similarity(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
+        similarity = similarity_score(prototype, prototypes + i * PROTOTYPE_SIZE, PROTOTYPE_SIZE);
         if (first || similarity > max_similarity) {
             closest = i;
             max_similarity = similarity;
@@ -275,6 +280,11 @@ void process_image(final_image in_image, final_image in_palette, const char* out
                 }
             }
         }
+        #ifdef NXOR
+        // pre-negate the prototype field, so we can save one XOR later in similarity_score
+        for(i = 0; i < TRANSFORMS * blockCount * PROTOTYPE_SIZE; i++)
+            prototypes[i] = prototypes[i] ^ 255;
+        #endif
     }
 
     for (i = 0; i < WORKERS; i++) {
