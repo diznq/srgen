@@ -47,7 +47,8 @@
 #define PROTOTYPE_SIZE (BLOCK_SIZE_SQ * TRANSFORM_SIZE)
 
 #define COS_T_MAX_VALUE (0x7FFFFFFF)
-#define NXOR
+//#define XOR_SIMILARITY
+#define ABS_SIMILARITY
 
 struct image;
 struct worker_call;
@@ -159,13 +160,19 @@ void release_image(final_image image) {
 
 inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsigned size) {
     unsigned i = 0;
+    #ifdef ABS_SIMILARITY
+    cos_t A1A2 = (cos_t)(510 * size);
+    #else
     cos_t A1A2 = (cos_t)0;
+    #endif
     for (; i < size; i++) {
-        #ifdef NXOR
+        #if defined(XOR_SIMILARITY)
         A1A2 += arr1[i] ^ arr2[i];
+        #elif defined(ABS_SIMILARITY)
+        A1A2 -= abs(arr1[i] - arr2[i]);
         #else
         int XY = arr1[i] - arr2[i];
-        A1A2 += LUT_COSM0[XY];
+        A1A2 += 510 - abs(XY); //LUT_COSM0[XY];
         #endif
     }
     return A1A2;
@@ -280,7 +287,7 @@ void process_image(final_image in_image, final_image in_palette, const char* out
                 }
             }
         }
-        #ifdef NXOR
+        #ifdef XOR_SIMILARITY
         // pre-negate the prototype field, so we can save one XOR later in similarity_score
         for(i = 0; i < TRANSFORMS * blockCount * PROTOTYPE_SIZE; i++)
             prototypes[i] = prototypes[i] ^ 255;
