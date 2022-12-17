@@ -48,7 +48,7 @@
 
 #define COS_T_MAX_VALUE (0x7FFFFFFF)
 //#define XOR_SIMILARITY
-#define ABS_SIMILARITY
+//#define ABS_SIMILARITY
 
 struct image;
 struct worker_call;
