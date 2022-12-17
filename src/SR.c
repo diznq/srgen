@@ -172,7 +172,7 @@ inline cos_t similarity_score(final_prototype arr1, final_prototype arr2, unsign
         A1A2 -= abs(arr1[i] - arr2[i]);
         #else
         int XY = arr1[i] - arr2[i];
-        A1A2 += 510 - abs(XY); //LUT_COSM0[XY];
+        A1A2 += LUT_COSM0[XY];
         #endif
     }
     return A1A2;
